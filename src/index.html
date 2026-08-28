@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MAC0623 — Class 8: WebXR Grab &amp; Bimanual Manipulation (Starter)</title>
+  <link rel="stylesheet" href="./lab08.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       HUD — provided. The VR entry button is appended separately by
+       VRButton.createButton() in main.js, not declared here. Don't
+       remove #attachMode / #handMode / #status; main.js's STUDENT
+       TODO comments point you at reading these exact IDs.
+       ============================================================ -->
+  <div id="hud">
+    <label>Attach to
+      <select id="attachMode">
+        <option value="ray">Target ray (controller.getController)</option>
+        <option value="grip">Grip (controller.getControllerGrip)</option>
+      </select>
+    </label>
+    <label>Two-hand mode
+      <select id="handMode">
+        <option value="symmetric">Symmetric</option>
+        <option value="asymmetric">Asymmetric (non-dominant = hand 0)</option>
+      </select>
+    </label>
+    <span id="status">Not in VR — click "Enter VR" below, or pose a device in the WebXR emulator tab</span>
+  </div>
+
+  <div id="help">
+    Red ray/marker = controller 0 (non-dominant, by convention). Blue = controller 1. <br>
+    Point a controller at an object and pull the trigger (fires <code>selectstart</code>)
+    to grab it, per your grab logic in <code>main.js</code>. 
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
