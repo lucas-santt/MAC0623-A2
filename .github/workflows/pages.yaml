@@ -34,3 +34,9 @@ jobs:
         run: |
           echo Add other actions to build,
           echo test, and deploy your project.
+
+      # Prepara a pasta src para ser publicada no GitHub Pages
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'src/' # Aqui você diz que o index.html está dentro de src
