@@ -10,6 +10,10 @@ Then, in a web browser, type in `http://0.0.0.0:8000/`
 
 https://github.com/lucas-santt/MAC0623-A2
 
+# Github pages
+
+https://lucas-santt.github.io/MAC0623-A2/
+
 # Design options
 
 `getController` was used instead of `getControllerGrip`
