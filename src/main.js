@@ -115,18 +115,6 @@ function main() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  /*
-  renderer.xr.addEventListener("sessionstart", () => {
-    const xrCamera = renderer.xr.getCamera();
-    xrCamera.layers.enable(1);
-    xrCamera.layers.enable(2);
-    xrCamera.cameras.forEach((cam) => {
-      cam.layers.enable(1);
-      cam.layers.enable(2);
-    });
-  });
-  */
-
   renderer.xr.enabled = true;
   document.body.appendChild(VRButton.createButton(renderer));
 
@@ -648,6 +636,20 @@ const GIZMO_AXIS_VECTORS = {
   z: new THREE.Vector3(0, 0, 1),
 };
 
+const GIZMOS_RING_ROT = {
+  x: new THREE.Euler(0, Math.PI / 2, 0),
+  y: new THREE.Euler(-Math.PI / 2, 0, 0),
+  z: new THREE.Euler(0, 0, 0),
+}
+
+const GIZMO_ROT_RADIUS = 0.55;
+const GIZMO_ROT_TUBE = 0.025;
+
+let gizmoSelectMode = null;
+let gizmoRotAxisWorld = new THREE.Vector3();
+let gizmoRotStartVec  = new THREE.Vector3();
+let gizmoCubeStartRot = new THREE.Quaternion();
+
 const gizmoRaycaster = new THREE.Raycaster();
 gizmoRaycaster.layers.set(2);
 
@@ -669,7 +671,7 @@ function buildGizmoHandles() {
   for (const axis of ["x", "y", "z"]) {
     const color = GIZMO_AXIS_COLORS[axis];
     const shaft = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.01, 0.01, 0.5, 8),
+      new THREE.CylinderGeometry(0.02, 0.02, 1.2, 8),
       new THREE.MeshBasicMaterial({ color })
     );
     shaft.position.y = 0.55;
@@ -681,6 +683,8 @@ function buildGizmoHandles() {
 
     shaft.userData.axis = axis;
     head.userData.axis = axis;
+    shaft.userData.mode = "translate";
+    head.userData.mode  = "translate";
     shaft.layers.set(2);
     head.layers.set(2);
     gizmoAxes.push(shaft, head);
@@ -689,6 +693,21 @@ function buildGizmoHandles() {
     handle.add(shaft, head);
     handle.rotation.copy(AXIS_ROTATIONS[axis]);
     group.add(handle);
+
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(GIZMO_ROT_RADIUS, GIZMO_ROT_TUBE, 8, 48),
+      new THREE.MeshBasicMaterial({color})
+    );
+
+    ring.userData.axis = axis;
+    ring.userData.mode = "rotate";
+    ring.layers.set(2);
+    gizmoAxes.push(ring);
+  
+    const ringHolder = new THREE.Group();
+    ringHolder.add(ring);
+    ringHolder.rotation.copy(GIZMOS_RING_ROT[axis]);
+    group.add(ringHolder);
   }
 
   group.visible = false;
@@ -703,37 +722,80 @@ function onGizmoSelectStart(event) {
   const rayDir = new THREE.Vector3(0, 0, -1).applyQuaternion(controller.quaternion).normalize();
   gizmoRaycaster.set(rayOg, rayDir);
 
+  // Debugging
+  /*
+  const debugLine = new THREE.ArrowHelper(rayDir, rayOg, 2, 0xffff00);
+  scene.add(debugLine);
+  setTimeout(() => scene.remove(debugLine), 2000);
+  */
+
   const intersections = gizmoRaycaster.intersectObjects(gizmoAxes, false);
   if(intersections.length === 0) return;
 
-  gizmoSelectedAxis = intersections[0].object.userData.axis;
+  const intObj = intersections[0].object;
+  gizmoSelectedAxis = intObj.userData.axis;
+  gizmoSelectMode = intObj.userData.mode;
   gizmoActiveController = controller;
-  gizmoControllerStartPos.copy(rayOg);
-  gizmoCubeStartPos.copy(cube.position);
+
+  if(gizmoSelectMode === "translate") {
+    gizmoControllerStartPos.copy(rayOg);
+    gizmoCubeStartPos.copy(cube.position);
+  } else {
+    gizmoRotAxisWorld.copy(GIZMO_AXIS_VECTORS[gizmoSelectedAxis])
+      .applyQuaternion(cube.quaternion)
+      .normalize();
+
+    gizmoCubeStartRot.copy(cube.quaternion);
+
+    gizmoRotStartVec.copy(rayOg).sub(cube.position);
+    gizmoRotStartVec
+      .addScaledVector(gizmoRotAxisWorld, -gizmoRotStartVec.dot(gizmoRotAxisWorld))
+      .normalize();
+  }
 }
 
 function onGizmoSelectEnd(event) {
   if(event.target !== gizmoActiveController) return;
   gizmoActiveController = null;
   gizmoSelectedAxis = null;
+  gizmoSelectMode = null;
 }
 
 function vrGizmoMapping() {
   if(!gizmoActiveController || !gizmoSelectedAxis) return;
-  //gizmoGroup.visible = true;
 
   const currentPos = new THREE.Vector3().setFromMatrixPosition(
     gizmoActiveController.matrixWorld
   );
-  const handDelta = currentPos.clone().sub(gizmoControllerStartPos);
 
-  const worldAxis = GIZMO_AXIS_VECTORS[gizmoSelectedAxis]
-    .clone()
-    .applyQuaternion(cube.quaternion)
-    .normalize();
-  const projectedDist = handDelta.dot(worldAxis);
+  if(gizmoSelectMode === "translate") {
+    const handDelta = currentPos.clone().sub(gizmoControllerStartPos);
 
-  cube.position.copy(gizmoCubeStartPos).addScaledVector(worldAxis, projectedDist);
+    const worldAxis = GIZMO_AXIS_VECTORS[gizmoSelectedAxis]
+      .clone()
+      .applyQuaternion(cube.quaternion)
+      .normalize();
+    const projectedDist = handDelta.dot(worldAxis);
+
+    cube.position.copy(gizmoCubeStartPos).addScaledVector(worldAxis, projectedDist);
+
+    return;
+  } 
+  
+  const currVec = currentPos.clone().sub(cube.position);
+  currVec.addScaledVector(gizmoRotAxisWorld, -currVec.dot(gizmoRotAxisWorld));
+
+  if(currVec.lengthSq() < 1e-6) return; // Threshold de 1e-6
+  currVec.normalize();
+
+  const cross = new THREE.Vector3().crossVectors(gizmoRotStartVec, currVec);
+  const sinA  = cross.dot(gizmoRotAxisWorld);
+  const cosA  = gizmoRotStartVec.dot(currVec);
+  const angle = Math.atan2(sinA, cosA);
+
+  const deltaRot = new THREE.Quaternion().setFromAxisAngle(gizmoRotAxisWorld, angle);
+
+  cube.quaternion.copy(deltaRot).multiply(gizmoCubeStartRot);
 }
 
 // ===== END STUDENT TODO =====
@@ -755,6 +817,14 @@ function animate() {
   lastCubePosition.copy(cube.position);
 
   updateStatus();
+
+  if(renderer.xr.isPresenting) {
+    const xrCamera = renderer.xr.getCamera();
+    xrCamera.cameras.forEach((cam) => {
+      cam.layers.enable(1);
+      cam.layers.enable(2);
+    });
+  }
 
   renderer.render(scene, camera);
 }
